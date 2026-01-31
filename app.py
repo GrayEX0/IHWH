@@ -324,7 +324,7 @@ def build_back(back_img: Optional[Image.Image], style: CardStyle) -> Image.Image
 
 st.set_page_config(page_title="I Have… Who Has… Image Deck Generator", layout="wide")
 st.title("🃏 Image-Only I Have… Who Has… Deck Generator")
-st.caption("Upload images → auto-build a perfect loop deck → cards show images only (no item text).")
+st.caption("Upload images → auto-build a perfect loop deck → cards show images only.")
 
 with st.sidebar:
     st.header("Card Settings")
