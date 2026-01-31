@@ -308,7 +308,7 @@ def build_back(back_img: Optional[Image.Image], style: CardStyle) -> Image.Image
 
 st.set_page_config(page_title="Image-Only I Have… Who Has…", layout="wide")
 st.title("🃏 Image-Only I Have… Who Has… Deck Generator")
-st.caption("Upload images → reorder via thumbnails → build a perfect loop → export PNGs + PDFs.")
+st.caption("Upload images, Check the loop, Download, Enjoy")
 
 # --- Sidebar controls ---
 with st.sidebar:
