@@ -33,7 +33,6 @@ def parse_hex_color(hex_str: str) -> Tuple[int, int, int, int]:
     return (255, 255, 255, 255)
 
 def fit_image_cover(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
-    """Resize+crop to fill a rectangle."""
     src_w, src_h = img.size
     if src_w <= 0 or src_h <= 0:
         return Image.new("RGBA", (target_w, target_h), (255, 255, 255, 0))
@@ -45,7 +44,6 @@ def fit_image_cover(img: Image.Image, target_w: int, target_h: int) -> Image.Ima
     return resized.crop((left, top, left + target_w, top + target_h))
 
 def fit_image_contain(img: Image.Image, target_w: int, target_h: int) -> Image.Image:
-    """Resize to fit inside rectangle without cropping."""
     src_w, src_h = img.size
     if src_w <= 0 or src_h <= 0:
         return Image.new("RGBA", (target_w, target_h), (255, 255, 255, 0))
@@ -65,7 +63,6 @@ def get_font(font_name: str, font_size: int, uploaded_ttf_bytes: Optional[bytes]
         except Exception:
             pass
 
-    # DejaVu is typically available on Streamlit Cloud
     candidates = {
         "DejaVu Sans": ["DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"],
         "DejaVu Sans Bold": ["DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"],
@@ -82,9 +79,9 @@ def get_font(font_name: str, font_size: int, uploaded_ttf_bytes: Optional[bytes]
     return ImageFont.load_default()
 
 def draw_centered(draw: ImageDraw.ImageDraw, text: str, bbox, font, fill):
-    x0, y0, x1, y1 = bbox
     if not text:
         return
+    x0, y0, x1, y1 = bbox
     tb = draw.textbbox((0, 0), text, font=font)
     tw, th = tb[2] - tb[0], tb[3] - tb[1]
     x = x0 + (x1 - x0 - tw) // 2
@@ -123,7 +120,6 @@ def export_pdf(images: List[Image.Image], page_size_name: str, cards_per_row: in
             for col in range(cards_per_row):
                 if idx >= len(images):
                     break
-
                 img = images[idx].convert("RGBA")
                 rgb = Image.new("RGB", img.size, (255, 255, 255))
                 rgb.paste(img, mask=img.split()[-1])
@@ -153,14 +149,14 @@ def export_pdf(images: List[Image.Image], page_size_name: str, cards_per_row: in
 # Deck building + loop checking
 # -----------------------------
 
-def build_cycle_indices(n: int, rng: random.Random) -> List[Tuple[int, int]]:
+def build_cycle_indices(n: int, rng: random.Random, base_order: List[int]) -> List[Tuple[int, int]]:
     """
-    Returns list of (have_idx, who_idx) forming one single cycle.
+    Creates one single loop from indices.
+    base_order defines the starting order; optional shuffle happens outside.
     """
     if n < 2:
         raise ValueError("Need at least 2 images.")
-    order = list(range(n))
-    rng.shuffle(order)
+    order = base_order[:]
     pairs = []
     for i in range(n):
         a = order[i]
@@ -175,13 +171,13 @@ def check_single_loop_indices(pairs: List[Tuple[int, int]], n: int) -> Tuple[boo
     who = [b for _, b in pairs]
 
     if len(set(have)) != n:
-        return False, "Not every image appears exactly once as a top ('I have') image."
+        return False, "Not every image appears exactly once as TOP."
     if len(set(who)) != n:
-        return False, "Not every image appears exactly once as a bottom ('Who has') image."
+        return False, "Not every image appears exactly once as BOTTOM."
     if set(have) != set(who) or set(have) != set(range(n)):
-        return False, "Mismatch between top/bottom usage (should be the same set of images)."
-
+        return False, "Mismatch between top/bottom usage."
     mapping = {a: b for a, b in pairs}
+
     start = have[0]
     visited = set()
     cur = start
@@ -191,9 +187,9 @@ def check_single_loop_indices(pairs: List[Tuple[int, int]], n: int) -> Tuple[boo
         visited.add(cur)
         cur = mapping[cur]
     if cur != start:
-        return False, "Does not return to the start (not a closed loop)."
+        return False, "Does not return to start (not a closed loop)."
     if len(visited) != n:
-        return False, "Not all images are connected in one loop."
+        return False, "Not all images are connected."
     return True, "Perfect single-loop deck verified."
 
 
@@ -213,13 +209,11 @@ class CardStyle:
     top_bg_img: Optional[Image.Image]
     bottom_bg_img: Optional[Image.Image]
 
-    # boxes
     box_margin: int
     box_border: int
     box_border_color: Tuple[int, int, int, int]
     box_fill_color: Tuple[int, int, int, int]
 
-    # labels
     show_labels: bool
     top_label: str
     bottom_label: str
@@ -228,7 +222,6 @@ class CardStyle:
     label_color: Tuple[int, int, int, int]
     uploaded_ttf_bytes: Optional[bytes]
 
-    # divider
     divider_thickness: int
     divider_color: Tuple[int, int, int, int]
 
@@ -240,13 +233,11 @@ def build_front(have_img: Image.Image, who_img: Image.Image, style: CardStyle) -
 
     card = Image.new("RGBA", (W, H), (255, 255, 255, 255))
 
-    # Top background
     top_area = Image.new("RGBA", (W, top_h), style.top_color)
     if style.top_bg_img:
         top_area = Image.alpha_composite(top_area, fit_image_cover(style.top_bg_img, W, top_h))
     card.paste(top_area, (0, 0), top_area)
 
-    # Bottom background
     bottom_area = Image.new("RGBA", (W, bottom_h), style.bottom_color)
     if style.bottom_bg_img:
         bottom_area = Image.alpha_composite(bottom_area, fit_image_cover(style.bottom_bg_img, W, bottom_h))
@@ -254,7 +245,6 @@ def build_front(have_img: Image.Image, who_img: Image.Image, style: CardStyle) -
 
     draw = ImageDraw.Draw(card)
 
-    # Divider
     if style.divider_thickness > 0:
         y = top_h
         draw.rectangle([0, y - style.divider_thickness // 2, W, y + style.divider_thickness // 2],
@@ -262,34 +252,30 @@ def build_front(have_img: Image.Image, who_img: Image.Image, style: CardStyle) -
 
     pad = style.padding
     font = get_font(style.font_name, style.label_font_size, style.uploaded_ttf_bytes)
-
-    # Label areas (optional)
     label_h = int(min(top_h, bottom_h) * 0.18) if style.show_labels else 0
 
     if style.show_labels:
         draw_centered(draw, style.top_label, (pad, pad, W - pad, pad + label_h), font, style.label_color)
-        draw_centered(draw, style.bottom_label, (pad, top_h + pad, W - pad, top_h + pad + label_h), font, style.label_color)
+        draw_centered(draw, style.bottom_label, (pad, top_h + pad, W - pad, top_h + pad + label_h),
+                      font, style.label_color)
 
-    # Image boxes: one in TOP, one in BOTTOM
-    # Top box
-    top_box_x0 = pad + style.box_margin
-    top_box_x1 = W - pad - style.box_margin
-    top_box_y0 = pad + label_h
-    top_box_y1 = top_h - pad
+    # Top image box
+    top_x0 = pad + style.box_margin
+    top_x1 = W - pad - style.box_margin
+    top_y0 = pad + label_h
+    top_y1 = top_h - pad
 
-    # Bottom box
-    bot_box_x0 = pad + style.box_margin
-    bot_box_x1 = W - pad - style.box_margin
-    bot_box_y0 = top_h + pad + label_h
-    bot_box_y1 = H - pad
+    # Bottom image box
+    bot_x0 = pad + style.box_margin
+    bot_x1 = W - pad - style.box_margin
+    bot_y0 = top_h + pad + label_h
+    bot_y1 = H - pad
 
-    # Draw boxes
-    draw.rectangle([top_box_x0, top_box_y0, top_box_x1, top_box_y1],
+    draw.rectangle([top_x0, top_y0, top_x1, top_y1],
                    fill=style.box_fill_color, outline=style.box_border_color, width=style.box_border)
-    draw.rectangle([bot_box_x0, bot_box_y0, bot_box_x1, bot_box_y1],
+    draw.rectangle([bot_x0, bot_y0, bot_x1, bot_y1],
                    fill=style.box_fill_color, outline=style.box_border_color, width=style.box_border)
 
-    # Paste images inside (contain)
     def paste_into_box(img: Image.Image, x0, y0, x1, y1):
         inner_x0 = x0 + style.box_border + 6
         inner_y0 = y0 + style.box_border + 6
@@ -300,9 +286,8 @@ def build_front(have_img: Image.Image, who_img: Image.Image, style: CardStyle) -
         placed = fit_image_contain(img, inner_w, inner_h)
         card.paste(placed, (inner_x0, inner_y0), placed)
 
-    paste_into_box(have_img, top_box_x0, top_box_y0, top_box_x1, top_box_y1)
-    paste_into_box(who_img, bot_box_x0, bot_box_y0, bot_box_x1, bot_box_y1)
-
+    paste_into_box(have_img, top_x0, top_y0, top_x1, top_y1)
+    paste_into_box(who_img, bot_x0, bot_y0, bot_x1, bot_y1)
     return card
 
 def build_back(back_img: Optional[Image.Image], style: CardStyle) -> Image.Image:
@@ -312,7 +297,6 @@ def build_back(back_img: Optional[Image.Image], style: CardStyle) -> Image.Image
         fitted = fit_image_cover(back_img, W, H)
         back.paste(fitted, (0, 0), fitted)
     else:
-        # simple neutral back
         draw = ImageDraw.Draw(back)
         draw.rectangle([0, 0, W, H], fill=(240, 240, 240, 255))
     return back
@@ -322,13 +306,13 @@ def build_back(back_img: Optional[Image.Image], style: CardStyle) -> Image.Image
 # Streamlit UI
 # -----------------------------
 
-st.set_page_config(page_title="I Have… Who Has… Image Deck Generator", layout="wide")
+st.set_page_config(page_title="Image-Only I Have… Who Has…", layout="wide")
 st.title("🃏 Image-Only I Have… Who Has… Deck Generator")
-st.caption("Upload images → auto-build a perfect loop deck → cards show images only.")
+st.caption("Upload images → reorder via thumbnails → build a perfect loop → export PNGs + PDFs.")
 
+# --- Sidebar controls ---
 with st.sidebar:
     st.header("Card Settings")
-
     card_w = st.number_input("Card width (px)", 400, 2000, 825, 25)
     card_h = st.number_input("Card height (px)", 400, 2600, 1125, 25)
     split_ratio = st.slider("Top section height (%)", 35, 70, 55) / 100.0
@@ -358,7 +342,7 @@ with st.sidebar:
     box_fill_color_hex = st.color_picker("Box fill color", "#FFFFFF")
 
     st.subheader("Labels (optional)")
-    show_labels = st.checkbox("Show labels ('I have' / 'Who has')", value=True)
+    show_labels = st.checkbox("Show labels", value=True)
     custom_labels = st.checkbox("Customize labels", value=False, disabled=not show_labels)
     if show_labels:
         if custom_labels:
@@ -382,14 +366,14 @@ with st.sidebar:
     divider_color_hex = st.color_picker("Divider color", "#111111")
 
     st.subheader("Back of Card")
-    back_img_file = st.file_uploader("Upload backside image (used for ALL cards)", type=["png", "jpg", "jpeg", "webp"], key="backimg")
+    back_img_file = st.file_uploader("Upload backside image", type=["png", "jpg", "jpeg", "webp"], key="backimg")
 
     st.subheader("PDF Export")
     page_size_name = st.selectbox("Page size", ["A4", "Letter"])
     cards_per_row = st.slider("Cards per row", 1, 4, 2)
     cards_per_col = st.slider("Cards per column", 1, 5, 2)
 
-# Load background/back images
+# Load backgrounds/back
 top_bg_img = load_image(top_bg_file) if top_bg_file else None
 bottom_bg_img = load_image(bottom_bg_file) if bottom_bg_file else None
 back_img = load_image(back_img_file) if back_img_file else None
@@ -418,49 +402,155 @@ style = CardStyle(
     divider_color=parse_hex_color(divider_color_hex),
 )
 
-st.subheader("1) Upload your images (this defines the whole deck)")
+# --- Upload images ---
+st.subheader("1) Upload images (2+)")
 uploaded_images = st.file_uploader(
-    "Upload 2+ images (each image becomes a unique 'item')",
+    "Upload images (each image becomes an item). No text is used.",
     type=["png", "jpg", "jpeg", "webp"],
     accept_multiple_files=True
 )
 
-st.subheader("2) Deck builder")
-seed_on = st.checkbox("Use fixed shuffle seed (repeatable)", value=False)
-seed_val = st.number_input("Seed", 0, 999999, 1234, disabled=not seed_on)
-rng = random.Random(int(seed_val) if seed_on else None)
+# Session state: store images + order
+def init_images(files):
+    imgs = []
+    for idx, f in enumerate(files):
+        try:
+            pil = Image.open(f).convert("RGBA")
+            imgs.append({"id": idx, "pil": pil})
+        except Exception:
+            pass
+    st.session_state.imgs = imgs
+    st.session_state.order = list(range(len(imgs)))
 
-build_btn = st.button("✅ Build Deck + Check Loop", type="primary")
+if "imgs" not in st.session_state:
+    st.session_state.imgs = []
+if "order" not in st.session_state:
+    st.session_state.order = []
+
+if uploaded_images:
+    # If uploads changed (count differs), re-init
+    if len(st.session_state.imgs) != len(uploaded_images):
+        init_images(uploaded_images)
+
+# --- Reorder grid ---
+st.subheader("2) Reorder images (thumbnail grid)")
+if not st.session_state.imgs or len(st.session_state.imgs) < 2:
+    st.info("Upload at least 2 images to enable reordering.")
+else:
+    cols_count = st.slider("Grid columns", 2, 6, 4)
+    thumb_size = st.slider("Thumbnail size (px)", 80, 260, 160)
+
+    def swap_positions(order, i, j):
+        order[i], order[j] = order[j], order[i]
+
+    def move_to(order, from_idx, to_idx):
+        item = order.pop(from_idx)
+        order.insert(to_idx, item)
+
+    # Quick tools
+    tool_a, tool_b, tool_c = st.columns([1, 1, 2])
+    with tool_a:
+        if st.button("↻ Reset to upload order"):
+            st.session_state.order = list(range(len(st.session_state.imgs)))
+    with tool_b:
+        if st.button("🔀 Shuffle order"):
+            tmp = st.session_state.order[:]
+            random.shuffle(tmp)
+            st.session_state.order = tmp
+    with tool_c:
+        st.caption("Tip: use ⬆️⬇️ to change the loop order (the deck is built from this order).")
+
+    order = st.session_state.order
+    n = len(order)
+
+    # Build grid rows
+    rows = (n + cols_count - 1) // cols_count
+    idx_in_order = 0
+
+    for r in range(rows):
+        row_cols = st.columns(cols_count)
+        for c in range(cols_count):
+            if idx_in_order >= n:
+                break
+
+            pos = idx_in_order
+            img_idx = order[pos]
+            pil = st.session_state.imgs[img_idx]["pil"]
+
+            with row_cols[c]:
+                st.image(pil, width=thumb_size, caption=f"#{pos+1}")
+
+                # Move buttons: linear order
+                b1, b2, b3, b4 = st.columns(4)
+                with b1:
+                    if st.button("⬅️", key=f"left_{pos}"):
+                        if pos > 0:
+                            swap_positions(order, pos, pos - 1)
+                            st.session_state.order = order
+                            st.rerun()
+                with b2:
+                    if st.button("➡️", key=f"right_{pos}"):
+                        if pos < n - 1:
+                            swap_positions(order, pos, pos + 1)
+                            st.session_state.order = order
+                            st.rerun()
+                with b3:
+                    if st.button("⬆️", key=f"up_{pos}"):
+                        if pos - cols_count >= 0:
+                            swap_positions(order, pos, pos - cols_count)
+                            st.session_state.order = order
+                            st.rerun()
+                with b4:
+                    if st.button("⬇️", key=f"down_{pos}"):
+                        if pos + cols_count < n:
+                            swap_positions(order, pos, pos + cols_count)
+                            st.session_state.order = order
+                            st.rerun()
+
+                # Move-to control
+                move_to_pos = st.selectbox(
+                    "Move to position",
+                    options=list(range(1, n + 1)),
+                    index=pos,
+                    key=f"moveto_{pos}"
+                )
+                if move_to_pos != pos + 1:
+                    move_to(order, pos, move_to_pos - 1)
+                    st.session_state.order = order
+                    st.rerun()
+
+            idx_in_order += 1
+
+# --- Build deck ---
+st.subheader("3) Build deck (perfect loop)")
+
+colA, colB = st.columns([1, 2])
+with colA:
+    shuffle_before_build = st.checkbox("Shuffle before building the loop", value=False)
+    seed_on = st.checkbox("Use fixed shuffle seed", value=False)
+    seed_val = st.number_input("Seed", 0, 999999, 1234, disabled=not seed_on)
+    build_btn = st.button("✅ Build Deck + Check Loop", type="primary")
 
 preview = st.empty()
 status = st.empty()
 
 if build_btn:
-    if not uploaded_images or len(uploaded_images) < 2:
+    if not st.session_state.imgs or len(st.session_state.imgs) < 2:
         status.error("Please upload at least 2 images.")
         st.stop()
 
-    # Load images
-    imgs: List[Image.Image] = []
-    for f in uploaded_images:
-        try:
-            imgs.append(Image.open(f).convert("RGBA"))
-        except Exception:
-            pass
+    imgs = [d["pil"] for d in st.session_state.imgs]
+    base_order = st.session_state.order[:]
 
-    if len(imgs) < 2:
-        status.error("Could not read enough images. Please try different files.")
-        st.stop()
+    rng = random.Random(int(seed_val) if seed_on else None)
+    if shuffle_before_build:
+        rng.shuffle(base_order)
 
-    # Build a perfect loop over image indices
-    pairs = build_cycle_indices(len(imgs), rng)
+    pairs = build_cycle_indices(len(imgs), rng, base_order)
     ok, msg = check_single_loop_indices(pairs, len(imgs))
-    if ok:
-        status.success(msg)
-    else:
-        status.error(msg)
+    status.success(msg) if ok else status.error(msg)
 
-    # Preview first 6 cards
+    # Preview first 6
     preview_cards = []
     for (have_i, who_i) in pairs[:6]:
         preview_cards.append(build_front(imgs[have_i], imgs[who_i], style))
@@ -471,7 +561,7 @@ if build_btn:
             with cols[i % 3]:
                 st.image(card_img, caption=f"Card {i+1}", use_container_width=True)
 
-    # Generate full exports
+    # Exports
     st.subheader("Exports")
     back_card = build_back(back_img, style)
 
@@ -501,7 +591,7 @@ if build_btn:
     st.download_button("Download PDF (Fronts)", data=fronts_pdf, file_name="fronts.pdf", mime="application/pdf")
     st.download_button("Download PDF (Backs)", data=backs_pdf, file_name="backs.pdf", mime="application/pdf")
 
-    with st.expander("Show loop order (index-based)"):
-        st.write("This shows the cycle using image positions (no names used):")
+    with st.expander("Show loop order (based on your current image order)"):
+        st.write("This is the cycle (image positions in your ordered list):")
         for i, (a, b) in enumerate(pairs, start=1):
-            st.write(f"{i:02d}. image #{a+1} → image #{b+1}")
+            st.write(f"{i:02d}. position #{base_order.index(a)+1} → position #{base_order.index(b)+1}")
